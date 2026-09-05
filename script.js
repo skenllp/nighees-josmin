@@ -6,17 +6,30 @@
     const tapBtn = document.getElementById('tapToOpen');
     document.documentElement.classList.add('locked');
 
-    function openInvite() {
+    let isOpening = false;
+
+    function openInvite(e) {
+      if (e && typeof e.stopPropagation === 'function') {
+        e.stopPropagation();
+      }
+      if (isOpening) return;
+      isOpening = true;
+
+      // Immediately start music on the opening gesture
+      playMusic();
+
       cover.classList.add('open');
       mainEl.classList.add('show');
       document.documentElement.classList.remove('locked');
-      startMusic();
       setTimeout(() => { cover.classList.add('hidden'); }, 1350);
     }
 
     tapBtn.addEventListener('click', openInvite);
     tapBtn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInvite(); }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openInvite(e);
+      }
     });
     cover.addEventListener('click', openInvite);
 
@@ -47,37 +60,73 @@
     const muteBtn = document.getElementById('mute-btn');
     const iconSound = document.getElementById('icon-sound');
     const iconMuted = document.getElementById('icon-muted');
-    let started = false;
 
-    function startMusic() {
-      if (!started) {
-        audio.volume = 0.40;
-        audio.play().then(() => { started = true; }).catch(() => { });
+    // Prime/buffer the audio file early
+    if (audio) {
+      try {
+        audio.volume = 0.50;
+        audio.load();
+      } catch (err) {}
+    }
+
+    function updateMusicUI(isPlaying) {
+      if (!muteBtn || !iconSound || !iconMuted) return;
+      if (isPlaying) {
+        iconSound.style.display = '';
+        iconMuted.style.display = 'none';
+        muteBtn.classList.remove('is-paused');
+        muteBtn.setAttribute('aria-label', 'Mute background music');
+        muteBtn.setAttribute('title', 'Mute music');
+      } else {
+        iconSound.style.display = 'none';
+        iconMuted.style.display = '';
+        muteBtn.classList.add('is-paused');
+        muteBtn.setAttribute('aria-label', 'Play background music');
+        muteBtn.setAttribute('title', 'Play music');
       }
     }
 
-    window.addEventListener('load', () => {
-      audio.volume = 0.40;
-      audio.play().then(() => { started = true; }).catch(() => { });
-    });
+    if (audio) {
+      audio.addEventListener('play', () => updateMusicUI(true));
+      audio.addEventListener('pause', () => updateMusicUI(false));
+      audio.addEventListener('ended', () => updateMusicUI(false));
+    }
 
-    ['click', 'scroll', 'touchstart', 'keydown'].forEach(evt => {
-      document.addEventListener(evt, startMusic, { once: true, passive: true });
-    });
+    function playMusic() {
+      if (!audio) return;
+      try {
+        audio.volume = 0.50;
+      } catch (err) {}
 
-    muteBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      startMusic();
-      if (audio.paused) {
-        audio.play();
-        iconSound.style.display = '';
-        iconMuted.style.display = 'none';
-      } else {
-        audio.pause();
-        iconSound.style.display = 'none';
-        iconMuted.style.display = '';
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('Audio play deferred/prevented:', err);
+          // Fallback: If autoplay policy blocked it, resume on next interaction
+          const resumeAudio = () => {
+            audio.play().catch(() => {});
+            ['click', 'touchstart', 'scroll', 'keydown'].forEach(evt => {
+              document.removeEventListener(evt, resumeAudio);
+            });
+          };
+          ['click', 'touchstart', 'scroll', 'keydown'].forEach(evt => {
+            document.addEventListener(evt, resumeAudio, { once: true, passive: true });
+          });
+        });
       }
-    });
+    }
+
+    if (muteBtn) {
+      muteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!audio) return;
+        if (audio.paused) {
+          playMusic();
+        } else {
+          audio.pause();
+        }
+      });
+    }
 
     /* ==========================================================
        SCROLL REVEAL — IntersectionObserver

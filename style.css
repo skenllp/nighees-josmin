@@ -1554,6 +1554,10 @@
       pointer-events: none;
     }
 
+    #mute-btn.is-paused .music-pulse {
+      display: none;
+    }
+
     @keyframes musicPulse {
 
       0%,
